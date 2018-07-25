@@ -107,7 +107,7 @@ enum e_rga_src_color_swap {
 };
 
 enum e_rga_src_csc_mode {
-	RGA_DST_CSC_MODE_BYPASS = 0,
+	RGA_SRC_CSC_MODE_BYPASS = 0,
 	RGA_SRC_CSC_MODE_BT601_R0 = 1,
 	RGA_SRC_CSC_MODE_BT601_R1 = 2,
 	RGA_SRC_CSC_MODE_BT709_R0 = 3,
