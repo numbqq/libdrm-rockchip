@@ -1,3 +1,9 @@
+libdrm (2.4.80) unstable; urgency=medium
+
+  2.4.80
+
+ -- Nick <nick@khadas.com>  Wed, 25 Jul 2018 11:02:48 +0100
+
 libdrm (2.4.74-2) unstable; urgency=medium
 
   * Add rockchip drm support
