@@ -158,6 +158,11 @@ AC_ARG_ENABLE(etnaviv-experimental-api,
 	      [Enable support for etnaviv's experimental API (default: disabled)]),
 	      [ETNAVIV=$enableval], [ETNAVIV=no])
 
+AC_ARG_ENABLE(rockchip-experimental-api,
+	      AS_HELP_STRING([--enable-rockchip-experimental-api],
+	      [Enable support for rockchip's experimental API (default: disabled)]),
+	      [ROCKCHIP=$enableval], [ROCKCHIP=no])
+
 AC_ARG_ENABLE(install-test-programs,
 		  AS_HELP_STRING([--enable-install-test-programs],
 		  [Install test programs (default: no)]),
@@ -453,6 +458,11 @@ fi
 
 AM_CONDITIONAL(HAVE_ETNAVIV, [test "x$ETNAVIV" = xyes])
 
+AM_CONDITIONAL(HAVE_ROCKCHIP, [test "x$ROCKCHIP" = xyes])
+if test "x$ROCKCHIP" = xyes; then
+	AC_DEFINE(HAVE_ROCKCHIP, 1, [Have ROCKCHIP support])
+fi
+
 AM_CONDITIONAL(HAVE_INSTALL_TESTS, [test "x$INSTALL_TESTS" = xyes])
 
 AC_ARG_ENABLE([cairo-tests],
@@ -561,6 +571,8 @@ AC_CONFIG_FILES([
 	vc4/libdrm_vc4.pc
 	etnaviv/Makefile
 	etnaviv/libdrm_etnaviv.pc
+	rockchip/Makefile
+	rockchip/libdrm_rockchip.pc
 	tests/Makefile
 	tests/modeprint/Makefile
 	tests/modetest/Makefile
@@ -571,6 +583,7 @@ AC_CONFIG_FILES([
 	tests/amdgpu/Makefile
 	tests/vbltest/Makefile
 	tests/exynos/Makefile
+	tests/rockchip/Makefile
 	tests/tegra/Makefile
 	tests/nouveau/Makefile
 	tests/etnaviv/Makefile
@@ -594,4 +607,5 @@ echo "  Freedreno API  $FREEDRENO (kgsl: $FREEDRENO_KGSL)"
 echo "  Tegra API      $TEGRA"
 echo "  VC4 API        $VC4"
 echo "  Etnaviv API    $ETNAVIV"
+echo "  Rockchip API   $ROCKCHIP"
 echo ""
