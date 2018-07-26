@@ -30,6 +30,11 @@ if HAVE_NOUVEAU
 SUBDIRS += nouveau
 endif
 
+if HAVE_ROCKCHIP
+SUBDIRS += rockchip
+endif
+
+
 AM_CFLAGS = \
 	$(WARN_CFLAGS)\
 	-I $(top_srcdir)/include/drm \
