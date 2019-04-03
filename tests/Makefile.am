@@ -48,5 +48,10 @@ TESTS = \
 	random
 
 check_PROGRAMS = \
-	$(TESTS) \
-	drmdevice
+	$(TESTS)
+
+if HAVE_INSTALL_TESTS
+bin_PROGRAMS = drmdevice
+else
+check_PROGRAMS += drmdevice
+endif

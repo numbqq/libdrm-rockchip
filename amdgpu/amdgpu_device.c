@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "xf86drm.h"
 #include "amdgpu_drm.h"
@@ -126,6 +127,17 @@ static int amdgpu_get_auth(int fd, int *auth)
 
 static void amdgpu_device_free_internal(amdgpu_device_handle dev)
 {
+	pthread_mutex_lock(&fd_mutex);
+	util_hash_table_remove(fd_tab, UINT_TO_PTR(dev->fd));
+	if (util_hash_table_count(fd_tab) == 0) {
+		util_hash_table_destroy(fd_tab);
+		fd_tab = NULL;
+	}
+	close(dev->fd);
+	if ((dev->flink_fd >= 0) && (dev->fd != dev->flink_fd))
+		close(dev->flink_fd);
+	pthread_mutex_unlock(&fd_mutex);
+
 	amdgpu_vamgr_deinit(&dev->vamgr_32);
 	amdgpu_vamgr_deinit(&dev->vamgr);
 	amdgpu_vamgr_deinit(&dev->vamgr_high_32);
@@ -133,10 +145,6 @@ static void amdgpu_device_free_internal(amdgpu_device_handle dev)
 	util_hash_table_destroy(dev->bo_flink_names);
 	util_hash_table_destroy(dev->bo_handles);
 	pthread_mutex_destroy(&dev->bo_table_mutex);
-	util_hash_table_remove(fd_tab, UINT_TO_PTR(dev->fd));
-	close(dev->fd);
-	if ((dev->flink_fd >= 0) && (dev->fd != dev->flink_fd))
-		close(dev->flink_fd);
 	free(dev->marketing_name);
 	free(dev);
 }
@@ -198,7 +206,7 @@ int amdgpu_device_initialize(int fd,
 			return r;
 		}
 		if ((flag_auth) && (!flag_authexist)) {
-			dev->flink_fd = dup(fd);
+			dev->flink_fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
 		}
 		*major_version = dev->major_version;
 		*minor_version = dev->minor_version;
@@ -232,7 +240,7 @@ int amdgpu_device_initialize(int fd,
 		goto cleanup;
 	}
 
-	dev->fd = dup(fd);
+	dev->fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
 	dev->flink_fd = dev->fd;
 	dev->major_version = version->version_major;
 	dev->minor_version = version->version_minor;

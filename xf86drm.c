@@ -405,7 +405,7 @@ wait_for_udev:
     }
 #endif
 
-    fd = open(buf, O_RDWR, 0);
+    fd = open(buf, O_RDWR | O_CLOEXEC, 0);
     drmMsg("drmOpenDevice: open result is %d, (%s)\n",
            fd, fd < 0 ? strerror(errno) : "OK");
     if (fd >= 0)
@@ -425,7 +425,7 @@ wait_for_udev:
             chmod(buf, devmode);
         }
     }
-    fd = open(buf, O_RDWR, 0);
+    fd = open(buf, O_RDWR | O_CLOEXEC, 0);
     drmMsg("drmOpenDevice: open result is %d, (%s)\n",
            fd, fd < 0 ? strerror(errno) : "OK");
     if (fd >= 0)
@@ -474,7 +474,7 @@ static int drmOpenMinor(int minor, int create, int type)
     };
 
     sprintf(buf, dev_name, DRM_DIR_NAME, minor);
-    if ((fd = open(buf, O_RDWR, 0)) >= 0)
+    if ((fd = open(buf, O_RDWR | O_CLOEXEC, 0)) >= 0)
         return fd;
     return -errno;
 }
@@ -2855,6 +2855,8 @@ static char *drmGetMinorNameForFD(int fd, int type)
             return strdup(dev_name);
         }
     }
+
+    closedir(sysdir);
     return NULL;
 #else
     struct stat sbuf;
@@ -2952,6 +2954,9 @@ sysfs_uevent_get(const char *path, const char *fmt, ...)
 }
 #endif
 
+/* Little white lie to avoid major rework of the existing code */
+#define DRM_BUS_VIRTIO 0x10
+
 static int drmParseSubsystemType(int maj, int min)
 {
 #ifdef __linux__
@@ -2981,6 +2986,9 @@ static int drmParseSubsystemType(int maj, int min)
     if (strncmp(name, "/host1x", 7) == 0)
         return DRM_BUS_HOST1X;
 
+    if (strncmp(name, "/virtio", 7) == 0)
+        return DRM_BUS_VIRTIO;
+
     return -EINVAL;
 #elif defined(__OpenBSD__)
     return DRM_BUS_PCI;
@@ -2990,16 +2998,33 @@ static int drmParseSubsystemType(int maj, int min)
 #endif
 }
 
+static char *
+get_real_pci_path(int maj, int min, char *real_path)
+{
+    char path[PATH_MAX + 1], *term;
+
+    snprintf(path, sizeof(path), "/sys/dev/char/%d:%d/device", maj, min);
+    if (!realpath(path, real_path))
+        return NULL;
+
+    term = strrchr(real_path, '/');
+    if (term && strncmp(term, "/virtio", 7) == 0)
+        *term = 0;
+
+    return real_path;
+}
+
 static int drmParsePciBusInfo(int maj, int min, drmPciBusInfoPtr info)
 {
 #ifdef __linux__
     unsigned int domain, bus, dev, func;
-    char path[PATH_MAX + 1], *value;
+    char real_path[PATH_MAX + 1], *value;
     int num;
 
-    snprintf(path, sizeof(path), "/sys/dev/char/%d:%d/device", maj, min);
+    if (get_real_pci_path(maj, min, real_path) == NULL)
+        return -ENOENT;
 
-    value = sysfs_uevent_get(path, "PCI_SLOT_NAME");
+    value = sysfs_uevent_get(real_path, "PCI_SLOT_NAME");
     if (!value)
         return -ENOENT;
 
@@ -3112,14 +3137,16 @@ static int parse_separate_sysfs_files(int maj, int min,
       "subsystem_vendor",
       "subsystem_device",
     };
-    char path[PATH_MAX + 1];
+    char path[PATH_MAX + 1], real_path[PATH_MAX + 1];
     unsigned int data[ARRAY_SIZE(attrs)];
     FILE *fp;
     int ret;
 
+    if (get_real_pci_path(maj, min, real_path) == NULL)
+        return -ENOENT;
+
     for (unsigned i = ignore_revision ? 1 : 0; i < ARRAY_SIZE(attrs); i++) {
-        snprintf(path, PATH_MAX, "/sys/dev/char/%d:%d/device/%s", maj, min,
-                 attrs[i]);
+        snprintf(path, PATH_MAX, "%s/%s", real_path, attrs[i]);
         fp = fopen(path, "r");
         if (!fp)
             return -errno;
@@ -3143,11 +3170,14 @@ static int parse_separate_sysfs_files(int maj, int min,
 static int parse_config_sysfs_file(int maj, int min,
                                    drmPciDeviceInfoPtr device)
 {
-    char path[PATH_MAX + 1];
+    char path[PATH_MAX + 1], real_path[PATH_MAX + 1];
     unsigned char config[64];
     int fd, ret;
 
-    snprintf(path, PATH_MAX, "/sys/dev/char/%d:%d/device/config", maj, min);
+    if (get_real_pci_path(maj, min, real_path) == NULL)
+        return -ENOENT;
+
+    snprintf(path, PATH_MAX, "%s/config", real_path);
     fd = open(path, O_RDONLY);
     if (fd < 0)
         return -errno;
@@ -3674,6 +3704,53 @@ free_device:
     return ret;
 }
 
+static int
+process_device(drmDevicePtr *device, const char *d_name,
+               int req_subsystem_type,
+               bool fetch_deviceinfo, uint32_t flags)
+{
+    struct stat sbuf;
+    char node[PATH_MAX + 1];
+    int node_type, subsystem_type;
+    unsigned int maj, min;
+
+    node_type = drmGetNodeType(d_name);
+    if (node_type < 0)
+        return -1;
+
+    snprintf(node, PATH_MAX, "%s/%s", DRM_DIR_NAME, d_name);
+    if (stat(node, &sbuf))
+        return -1;
+
+    maj = major(sbuf.st_rdev);
+    min = minor(sbuf.st_rdev);
+
+    if (maj != DRM_MAJOR || !S_ISCHR(sbuf.st_mode))
+        return -1;
+
+    subsystem_type = drmParseSubsystemType(maj, min);
+    if (req_subsystem_type != -1 && req_subsystem_type != subsystem_type)
+        return -1;
+
+    switch (subsystem_type) {
+    case DRM_BUS_PCI:
+    case DRM_BUS_VIRTIO:
+        return drmProcessPciDevice(device, node, node_type, maj, min,
+                                   fetch_deviceinfo, flags);
+    case DRM_BUS_USB:
+        return drmProcessUsbDevice(device, node, node_type, maj, min,
+                                   fetch_deviceinfo, flags);
+    case DRM_BUS_PLATFORM:
+        return drmProcessPlatformDevice(device, node, node_type, maj, min,
+                                        fetch_deviceinfo, flags);
+    case DRM_BUS_HOST1X:
+        return drmProcessHost1xDevice(device, node, node_type, maj, min,
+                                      fetch_deviceinfo, flags);
+    default:
+        return -1;
+   }
+}
+
 /* Consider devices located on the same bus as duplicate and fold the respective
  * entries into a single one.
  *
@@ -3702,6 +3779,28 @@ drm_device_validate_flags(uint32_t flags)
 {
         return (flags & ~DRM_DEVICE_GET_PCI_REVISION);
 }
+
+static bool
+drm_device_has_rdev(drmDevicePtr device, dev_t find_rdev)
+{
+    struct stat sbuf;
+
+    for (int i = 0; i < DRM_NODE_MAX; i++) {
+        if (device->available_nodes & 1 << i) {
+            if (stat(device->nodes[i], &sbuf) == 0 &&
+                sbuf.st_rdev == find_rdev)
+                return true;
+        }
+    }
+    return false;
+}
+
+/*
+ * The kernel drm core has a number of places that assume maximum of
+ * 3x64 devices nodes. That's 64 for each of primary, control and
+ * render nodes. Rounded it up to 256 for simplicity.
+ */
+#define MAX_DRM_NODES 256
 
 /**
  * Get information about the opened drm device
@@ -3783,16 +3882,14 @@ int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device)
 
     return 0;
 #else
-    drmDevicePtr *local_devices;
+    drmDevicePtr local_devices[MAX_DRM_NODES];
     drmDevicePtr d;
     DIR *sysdir;
     struct dirent *dent;
     struct stat sbuf;
-    char node[PATH_MAX + 1];
-    int node_type, subsystem_type;
+    int subsystem_type;
     int maj, min;
     int ret, i, node_count;
-    int max_count = 16;
     dev_t find_rdev;
 
     if (drm_device_validate_flags(flags))
@@ -3812,108 +3909,48 @@ int drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device)
         return -EINVAL;
 
     subsystem_type = drmParseSubsystemType(maj, min);
-
-    local_devices = calloc(max_count, sizeof(drmDevicePtr));
-    if (local_devices == NULL)
-        return -ENOMEM;
+    if (subsystem_type < 0)
+        return subsystem_type;
 
     sysdir = opendir(DRM_DIR_NAME);
-    if (!sysdir) {
-        ret = -errno;
-        goto free_locals;
-    }
+    if (!sysdir)
+        return -errno;
 
     i = 0;
     while ((dent = readdir(sysdir))) {
-        node_type = drmGetNodeType(dent->d_name);
-        if (node_type < 0)
+        ret = process_device(&d, dent->d_name, subsystem_type, true, flags);
+        if (ret)
             continue;
 
-        snprintf(node, PATH_MAX, "%s/%s", DRM_DIR_NAME, dent->d_name);
-        if (stat(node, &sbuf))
-            continue;
-
-        maj = major(sbuf.st_rdev);
-        min = minor(sbuf.st_rdev);
-
-        if (maj != DRM_MAJOR || !S_ISCHR(sbuf.st_mode))
-            continue;
-
-        if (drmParseSubsystemType(maj, min) != subsystem_type)
-            continue;
-
-        switch (subsystem_type) {
-        case DRM_BUS_PCI:
-            ret = drmProcessPciDevice(&d, node, node_type, maj, min, true, flags);
-            if (ret)
-                continue;
-
+        if (i >= MAX_DRM_NODES) {
+            fprintf(stderr, "More than %d drm nodes detected. "
+                    "Please report a bug - that should not happen.\n"
+                    "Skipping extra nodes\n", MAX_DRM_NODES);
             break;
-
-        case DRM_BUS_USB:
-            ret = drmProcessUsbDevice(&d, node, node_type, maj, min, true, flags);
-            if (ret)
-                continue;
-
-            break;
-
-        case DRM_BUS_PLATFORM:
-            ret = drmProcessPlatformDevice(&d, node, node_type, maj, min, true, flags);
-            if (ret)
-                continue;
-
-            break;
-
-        case DRM_BUS_HOST1X:
-            ret = drmProcessHost1xDevice(&d, node, node_type, maj, min, true, flags);
-            if (ret)
-                continue;
-
-            break;
-
-        default:
-            continue;
         }
-
-        if (i >= max_count) {
-            drmDevicePtr *temp;
-
-            max_count += 16;
-            temp = realloc(local_devices, max_count * sizeof(drmDevicePtr));
-            if (!temp)
-                goto free_devices;
-            local_devices = temp;
-        }
-
-        /* store target at local_devices[0] for ease to use below */
-        if (find_rdev == sbuf.st_rdev && i) {
-            local_devices[i] = local_devices[0];
-            local_devices[0] = d;
-        }
-        else
-            local_devices[i] = d;
+        local_devices[i] = d;
         i++;
     }
     node_count = i;
 
     drmFoldDuplicatedDevices(local_devices, node_count);
 
-    *device = local_devices[0];
-    drmFreeDevices(&local_devices[1], node_count - 1);
+    *device = NULL;
+
+    for (i = 0; i < node_count; i++) {
+        if (!local_devices[i])
+            continue;
+
+        if (drm_device_has_rdev(local_devices[i], find_rdev))
+            *device = local_devices[i];
+        else
+            drmFreeDevice(&local_devices[i]);
+    }
 
     closedir(sysdir);
-    free(local_devices);
     if (*device == NULL)
         return -ENODEV;
     return 0;
-
-free_devices:
-    drmFreeDevices(local_devices, i);
-    closedir(sysdir);
-
-free_locals:
-    free(local_devices);
-    return ret;
 #endif
 }
 
@@ -3949,98 +3986,31 @@ int drmGetDevice(int fd, drmDevicePtr *device)
  */
 int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices)
 {
-    drmDevicePtr *local_devices;
+    drmDevicePtr local_devices[MAX_DRM_NODES];
     drmDevicePtr device;
     DIR *sysdir;
     struct dirent *dent;
-    struct stat sbuf;
-    char node[PATH_MAX + 1];
-    int node_type, subsystem_type;
-    int maj, min;
     int ret, i, node_count, device_count;
-    int max_count = 16;
 
     if (drm_device_validate_flags(flags))
         return -EINVAL;
 
-    local_devices = calloc(max_count, sizeof(drmDevicePtr));
-    if (local_devices == NULL)
-        return -ENOMEM;
-
     sysdir = opendir(DRM_DIR_NAME);
-    if (!sysdir) {
-        ret = -errno;
-        goto free_locals;
-    }
+    if (!sysdir)
+        return -errno;
 
     i = 0;
     while ((dent = readdir(sysdir))) {
-        node_type = drmGetNodeType(dent->d_name);
-        if (node_type < 0)
+        ret = process_device(&device, dent->d_name, -1, devices != NULL, flags);
+        if (ret)
             continue;
 
-        snprintf(node, PATH_MAX, "%s/%s", DRM_DIR_NAME, dent->d_name);
-        if (stat(node, &sbuf))
-            continue;
-
-        maj = major(sbuf.st_rdev);
-        min = minor(sbuf.st_rdev);
-
-        if (maj != DRM_MAJOR || !S_ISCHR(sbuf.st_mode))
-            continue;
-
-        subsystem_type = drmParseSubsystemType(maj, min);
-
-        if (subsystem_type < 0)
-            continue;
-
-        switch (subsystem_type) {
-        case DRM_BUS_PCI:
-            ret = drmProcessPciDevice(&device, node, node_type,
-                                      maj, min, devices != NULL, flags);
-            if (ret)
-                continue;
-
+        if (i >= MAX_DRM_NODES) {
+            fprintf(stderr, "More than %d drm nodes detected. "
+                    "Please report a bug - that should not happen.\n"
+                    "Skipping extra nodes\n", MAX_DRM_NODES);
             break;
-
-        case DRM_BUS_USB:
-            ret = drmProcessUsbDevice(&device, node, node_type, maj, min,
-                                      devices != NULL, flags);
-            if (ret)
-                continue;
-
-            break;
-
-        case DRM_BUS_PLATFORM:
-            ret = drmProcessPlatformDevice(&device, node, node_type, maj, min,
-                                           devices != NULL, flags);
-            if (ret)
-                continue;
-
-            break;
-
-        case DRM_BUS_HOST1X:
-            ret = drmProcessHost1xDevice(&device, node, node_type, maj, min,
-                                         devices != NULL, flags);
-            if (ret)
-                continue;
-
-            break;
-
-        default:
-            continue;
         }
-
-        if (i >= max_count) {
-            drmDevicePtr *temp;
-
-            max_count += 16;
-            temp = realloc(local_devices, max_count * sizeof(drmDevicePtr));
-            if (!temp)
-                goto free_devices;
-            local_devices = temp;
-        }
-
         local_devices[i] = device;
         i++;
     }
@@ -4062,16 +4032,7 @@ int drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices)
     }
 
     closedir(sysdir);
-    free(local_devices);
     return device_count;
-
-free_devices:
-    drmFreeDevices(local_devices, i);
-    closedir(sysdir);
-
-free_locals:
-    free(local_devices);
-    return ret;
 }
 
 /**
