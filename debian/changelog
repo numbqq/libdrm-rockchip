@@ -1,3 +1,9 @@
+libdrm (2.4.97) unstable; urgency=medium
+
+  * bump version to 2.4.97
+
+ -- Nick <nick@khadas.com>  Wed, 03 Apr 2019 10:00:24 +0800
+
 libdrm (2.4.91) unstable; urgency=medium
 
   2.4.91
