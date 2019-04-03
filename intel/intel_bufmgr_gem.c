@@ -34,10 +34,6 @@
  *	    Dave Airlie <airlied@linux.ie>
  */
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include <xf86drm.h>
 #include <xf86atomic.h>
 #include <fcntl.h>
@@ -3664,6 +3660,8 @@ drm_intel_bufmgr_gem_init(int fd, int batch_size)
 		bufmgr_gem->gen = 9;
 	else if (IS_GEN10(bufmgr_gem->pci_device))
 		bufmgr_gem->gen = 10;
+	else if (IS_GEN11(bufmgr_gem->pci_device))
+		bufmgr_gem->gen = 11;
 	else {
 		free(bufmgr_gem);
 		bufmgr_gem = NULL;

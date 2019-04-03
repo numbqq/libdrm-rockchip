@@ -200,7 +200,8 @@
 #define PCI_CHIP_KABYLAKE_ULT_GT2F	0x5921
 #define PCI_CHIP_KABYLAKE_ULX_GT1_5	0x5915
 #define PCI_CHIP_KABYLAKE_ULX_GT1	0x590E
-#define PCI_CHIP_KABYLAKE_ULX_GT2	0x591E
+#define PCI_CHIP_KABYLAKE_ULX_GT2_0	0x591E
+#define PCI_CHIP_KABYLAKE_ULX_GT2_1	0x591C
 #define PCI_CHIP_KABYLAKE_DT_GT2	0x5912
 #define PCI_CHIP_KABYLAKE_M_GT2		0x5917
 #define PCI_CHIP_KABYLAKE_DT_GT1	0x5902
@@ -241,16 +242,30 @@
 #define PCI_CHIP_COFFEELAKE_U_GT3_4     0x3EA7
 #define PCI_CHIP_COFFEELAKE_U_GT3_5     0x3EA8
 
-#define PCI_CHIP_CANNONLAKE_U_GT2_0	0x5A52
-#define PCI_CHIP_CANNONLAKE_U_GT2_1	0x5A5A
-#define PCI_CHIP_CANNONLAKE_U_GT2_2	0x5A42
-#define PCI_CHIP_CANNONLAKE_U_GT2_3	0x5A4A
-#define PCI_CHIP_CANNONLAKE_Y_GT2_0	0x5A51
-#define PCI_CHIP_CANNONLAKE_Y_GT2_1	0x5A59
-#define PCI_CHIP_CANNONLAKE_Y_GT2_2	0x5A41
-#define PCI_CHIP_CANNONLAKE_Y_GT2_3	0x5A49
-#define PCI_CHIP_CANNONLAKE_Y_GT2_4	0x5A71
-#define PCI_CHIP_CANNONLAKE_Y_GT2_5	0x5A79
+#define PCI_CHIP_CANNONLAKE_0		0x5A51
+#define PCI_CHIP_CANNONLAKE_1		0x5A59
+#define PCI_CHIP_CANNONLAKE_2		0x5A41
+#define PCI_CHIP_CANNONLAKE_3		0x5A49
+#define PCI_CHIP_CANNONLAKE_4		0x5A52
+#define PCI_CHIP_CANNONLAKE_5		0x5A5A
+#define PCI_CHIP_CANNONLAKE_6		0x5A42
+#define PCI_CHIP_CANNONLAKE_7		0x5A4A
+#define PCI_CHIP_CANNONLAKE_8		0x5A50
+#define PCI_CHIP_CANNONLAKE_9		0x5A40
+#define PCI_CHIP_CANNONLAKE_10		0x5A54
+#define PCI_CHIP_CANNONLAKE_11		0x5A5C
+#define PCI_CHIP_CANNONLAKE_12		0x5A44
+#define PCI_CHIP_CANNONLAKE_13		0x5A4C
+
+#define PCI_CHIP_ICELAKE_11_0		0x8A50
+#define PCI_CHIP_ICELAKE_11_1		0x8A51
+#define PCI_CHIP_ICELAKE_11_2		0x8A5C
+#define PCI_CHIP_ICELAKE_11_3		0x8A5D
+#define PCI_CHIP_ICELAKE_11_4		0x8A52
+#define PCI_CHIP_ICELAKE_11_5		0x8A5A
+#define PCI_CHIP_ICELAKE_11_6		0x8A5B
+#define PCI_CHIP_ICELAKE_11_7		0x8A71
+#define PCI_CHIP_ICELAKE_11_8		0x8A70
 
 #define IS_MOBILE(devid)	((devid) == PCI_CHIP_I855_GM || \
 				 (devid) == PCI_CHIP_I915_GM || \
@@ -451,7 +466,8 @@
 
 #define IS_KBL_GT2(devid)	((devid) == PCI_CHIP_KABYLAKE_ULT_GT2	|| \
 				 (devid) == PCI_CHIP_KABYLAKE_ULT_GT2F	|| \
-				 (devid) == PCI_CHIP_KABYLAKE_ULX_GT2	|| \
+				 (devid) == PCI_CHIP_KABYLAKE_ULX_GT2_0	|| \
+				 (devid) == PCI_CHIP_KABYLAKE_ULX_GT2_1	|| \
 				 (devid) == PCI_CHIP_KABYLAKE_DT_GT2	|| \
 				 (devid) == PCI_CHIP_KABYLAKE_M_GT2	|| \
 				 (devid) == PCI_CHIP_KABYLAKE_HALO_GT2	|| \
@@ -515,22 +531,36 @@
 				 IS_GEMINILAKE(devid) || \
 				 IS_COFFEELAKE(devid))
 
-#define IS_CNL_Y(devid)		((devid) == PCI_CHIP_CANNONLAKE_Y_GT2_0 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_Y_GT2_1 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_Y_GT2_2 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_Y_GT2_3 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_Y_GT2_4 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_Y_GT2_5)
-
-#define IS_CNL_U(devid)		((devid) == PCI_CHIP_CANNONLAKE_U_GT2_0 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_U_GT2_1 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_U_GT2_2 || \
-				 (devid) == PCI_CHIP_CANNONLAKE_U_GT2_3)
-
-#define IS_CANNONLAKE(devid)	(IS_CNL_U(devid) || \
-				 IS_CNL_Y(devid))
+#define IS_CANNONLAKE(devid)	((devid) == PCI_CHIP_CANNONLAKE_0 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_1 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_2 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_3 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_4 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_5 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_6 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_7 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_8 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_9 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_10 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_11 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_12 || \
+				 (devid) == PCI_CHIP_CANNONLAKE_13)
 
 #define IS_GEN10(devid)		(IS_CANNONLAKE(devid))
+
+#define IS_ICELAKE_11(devid)	((devid) == PCI_CHIP_ICELAKE_11_0 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_1 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_2 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_3 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_4 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_5 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_6 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_7 || \
+				 (devid) == PCI_CHIP_ICELAKE_11_8)
+
+#define IS_ICELAKE(devid)	(IS_ICELAKE_11(devid))
+
+#define IS_GEN11(devid)		(IS_ICELAKE_11(devid))
 
 #define IS_9XX(dev)		(IS_GEN3(dev) || \
 				 IS_GEN4(dev) || \
@@ -539,6 +569,7 @@
 				 IS_GEN7(dev) || \
 				 IS_GEN8(dev) || \
 				 IS_GEN9(dev) || \
-				 IS_GEN10(dev))
+				 IS_GEN10(dev) || \
+				 IS_GEN11(dev))
 
 #endif /* _INTEL_CHIPSET_H */
