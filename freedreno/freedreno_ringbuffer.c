@@ -32,11 +32,18 @@
 #include "freedreno_priv.h"
 #include "freedreno_ringbuffer.h"
 
-static struct fd_ringbuffer *
-ringbuffer_new(struct fd_pipe *pipe, uint32_t size,
+drm_public struct fd_ringbuffer *
+fd_ringbuffer_new_flags(struct fd_pipe *pipe, uint32_t size,
 		enum fd_ringbuffer_flags flags)
 {
 	struct fd_ringbuffer *ring;
+
+	/* we can't really support "growable" rb's in general for
+	 * stateobj's since we need a single gpu addr (ie. can't
+	 * do the trick of a chain of IB packets):
+	 */
+	if (flags & FD_RINGBUFFER_OBJECT)
+		assert(size);
 
 	ring = pipe->funcs->ringbuffer_new(pipe, size, flags);
 	if (!ring)
@@ -55,25 +62,30 @@ ringbuffer_new(struct fd_pipe *pipe, uint32_t size,
 drm_public struct fd_ringbuffer *
 fd_ringbuffer_new(struct fd_pipe *pipe, uint32_t size)
 {
-	return ringbuffer_new(pipe, size, 0);
+	return fd_ringbuffer_new_flags(pipe, size, 0);
 }
 
 drm_public struct fd_ringbuffer *
 fd_ringbuffer_new_object(struct fd_pipe *pipe, uint32_t size)
 {
-	/* we can't really support "growable" rb's in general for
-	 * stateobj's since we need a single gpu addr (ie. can't
-	 * do the trick of a chain of IB packets):
-	 */
-	assert(size);
-	return ringbuffer_new(pipe, size, FD_RINGBUFFER_OBJECT);
+	return fd_ringbuffer_new_flags(pipe, size, FD_RINGBUFFER_OBJECT);
 }
 
 drm_public void fd_ringbuffer_del(struct fd_ringbuffer *ring)
 {
-	if (!(ring->flags & FD_RINGBUFFER_OBJECT))
-		fd_ringbuffer_reset(ring);
+	if (!atomic_dec_and_test(&ring->refcnt))
+		return;
+
+	fd_ringbuffer_reset(ring);
 	ring->funcs->destroy(ring);
+}
+
+drm_public struct fd_ringbuffer *
+fd_ringbuffer_ref(struct fd_ringbuffer *ring)
+{
+	STATIC_ASSERT(sizeof(ring->refcnt) <= sizeof(ring->__pad));
+	atomic_inc(&ring->refcnt);
+	return ring;
 }
 
 /* ringbuffers which are IB targets should set the toplevel rb (ie.
@@ -143,21 +155,6 @@ drm_public void fd_ringbuffer_reloc2(struct fd_ringbuffer *ring,
 	ring->funcs->emit_reloc(ring, reloc);
 }
 
-drm_public void fd_ringbuffer_emit_reloc_ring(struct fd_ringbuffer *ring,
-		struct fd_ringmarker *target, struct fd_ringmarker *end)
-{
-	uint32_t submit_offset, size;
-
-	/* This function is deprecated and not supported on 64b devices: */
-	assert(ring->pipe->gpu_id < 500);
-	assert(target->ring == end->ring);
-
-	submit_offset = offset_bytes(target->cur, target->ring->start);
-	size = offset_bytes(end->cur, target->cur);
-
-	ring->funcs->emit_reloc_ring(ring, target->ring, 0, submit_offset, size);
-}
-
 drm_public uint32_t fd_ringbuffer_cmd_count(struct fd_ringbuffer *ring)
 {
 	if (!ring->funcs->cmd_count)
@@ -169,8 +166,7 @@ drm_public uint32_t
 fd_ringbuffer_emit_reloc_ring_full(struct fd_ringbuffer *ring,
 		struct fd_ringbuffer *target, uint32_t cmd_idx)
 {
-	uint32_t size = offset_bytes(target->cur, target->start);
-	return ring->funcs->emit_reloc_ring(ring, target, cmd_idx, 0, size);
+	return ring->funcs->emit_reloc_ring(ring, target, cmd_idx);
 }
 
 drm_public uint32_t
@@ -184,45 +180,3 @@ fd_ringbuffer_size(struct fd_ringbuffer *ring)
 	return offset_bytes(ring->cur, ring->start);
 }
 
-/*
- * Deprecated ringmarker API:
- */
-
-drm_public struct fd_ringmarker * fd_ringmarker_new(struct fd_ringbuffer *ring)
-{
-	struct fd_ringmarker *marker = NULL;
-
-	marker = calloc(1, sizeof(*marker));
-	if (!marker) {
-		ERROR_MSG("allocation failed");
-		return NULL;
-	}
-
-	marker->ring = ring;
-
-	marker->cur = marker->ring->cur;
-
-	return marker;
-}
-
-drm_public void fd_ringmarker_del(struct fd_ringmarker *marker)
-{
-	free(marker);
-}
-
-drm_public void fd_ringmarker_mark(struct fd_ringmarker *marker)
-{
-	marker->cur = marker->ring->cur;
-}
-
-drm_public uint32_t fd_ringmarker_dwords(struct fd_ringmarker *start,
-					 struct fd_ringmarker *end)
-{
-	return end->cur - start->cur;
-}
-
-drm_public int fd_ringmarker_flush(struct fd_ringmarker *marker)
-{
-	struct fd_ringbuffer *ring = marker->ring;
-	return ring->funcs->flush(ring, marker->cur, -1, NULL);
-}
