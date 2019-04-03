@@ -109,6 +109,8 @@ static void ring_bo_del(struct fd_device *dev, struct fd_bo *bo)
 {
 	int ret;
 
+	assert(atomic_read(&bo->refcnt) == 1);
+
 	pthread_mutex_lock(&table_lock);
 	ret = fd_bo_cache_free(&to_msm_device(dev)->ring_cache, bo);
 	pthread_mutex_unlock(&table_lock);
@@ -237,8 +239,11 @@ static int check_cmd_bo(struct fd_ringbuffer *ring,
 
 /* Ensure that submit has corresponding entry in cmds table for the
  * target cmdstream buffer:
+ *
+ * Returns TRUE if new cmd added (else FALSE if it was already in
+ * the cmds table)
  */
-static void get_cmd(struct fd_ringbuffer *ring, struct msm_cmd *target_cmd,
+static int get_cmd(struct fd_ringbuffer *ring, struct msm_cmd *target_cmd,
 		uint32_t submit_offset, uint32_t size, uint32_t type)
 {
 	struct msm_ringbuffer *msm_ring = to_msm_ringbuffer(ring);
@@ -252,7 +257,7 @@ static void get_cmd(struct fd_ringbuffer *ring, struct msm_cmd *target_cmd,
 				(cmd->size == size) &&
 				(cmd->type == type) &&
 				check_cmd_bo(ring, cmd, target_cmd->ring_bo))
-			return;
+			return FALSE;
 	}
 
 	/* create cmd buf if not: */
@@ -267,6 +272,8 @@ static void get_cmd(struct fd_ringbuffer *ring, struct msm_cmd *target_cmd,
 	cmd->pad = 0;
 
 	target_cmd->size = size;
+
+	return TRUE;
 }
 
 static void * msm_ringbuffer_hostptr(struct fd_ringbuffer *ring)
@@ -305,6 +312,8 @@ static void flush_reset(struct fd_ringbuffer *ring)
 
 	for (i = 0; i < msm_ring->nr_bos; i++) {
 		struct msm_bo *msm_bo = to_msm_bo(msm_ring->bos[i]);
+		if (!msm_bo)
+			continue;
 		msm_bo->current_ring_seqno = 0;
 		fd_bo_del(&msm_bo->base);
 	}
@@ -312,7 +321,7 @@ static void flush_reset(struct fd_ringbuffer *ring)
 	/* for each of the cmd buffers, clear their reloc's: */
 	for (i = 0; i < msm_ring->submit.nr_cmds; i++) {
 		struct msm_cmd *target_cmd = msm_ring->cmds[i];
-		if (target_cmd->ring->flags & FD_RINGBUFFER_OBJECT)
+		if (!target_cmd)
 			continue;
 		target_cmd->nr_relocs = 0;
 	}
@@ -479,6 +488,16 @@ static int msm_ringbuffer_flush(struct fd_ringbuffer *ring, uint32_t *last_start
 		struct drm_msm_gem_submit_cmd *cmd = &msm_ring->submit.cmds[i];
 		struct msm_cmd *msm_cmd = msm_ring->cmds[i];
 		if (msm_cmd->ring->flags & FD_RINGBUFFER_OBJECT) {
+			/* we could have dropped last reference: */
+			msm_ring->cmds[i] = NULL;
+
+			/* need to drop ring_bo ref prior to unref'ing the ring,
+			 * because ring_bo_del assumes it is dropping the *last*
+			 * reference:
+			 */
+			fd_bo_del(msm_ring->bos[cmd->submit_idx]);
+			msm_ring->bos[cmd->submit_idx] = NULL;
+
 			msm_ringbuffer_unref(msm_cmd->ring);
 			free(U642VOID(cmd->relocs));
 		}
@@ -559,6 +578,7 @@ static uint32_t msm_ringbuffer_emit_reloc_ring(struct fd_ringbuffer *ring,
 {
 	struct msm_cmd *cmd = NULL;
 	uint32_t idx = 0;
+	int added_cmd = FALSE;
 
 	LIST_FOR_EACH_ENTRY(cmd, &to_msm_ringbuffer(target)->cmd_list, list) {
 		if (idx == cmd_idx)
@@ -577,7 +597,8 @@ static uint32_t msm_ringbuffer_emit_reloc_ring(struct fd_ringbuffer *ring,
 		size = cmd->size;
 	} else {
 		struct fd_ringbuffer *parent = ring->parent ? ring->parent : ring;
-		get_cmd(parent, cmd, submit_offset, size, MSM_SUBMIT_CMD_IB_TARGET_BUF);
+		added_cmd = get_cmd(parent, cmd, submit_offset, size,
+				MSM_SUBMIT_CMD_IB_TARGET_BUF);
 	}
 
 	msm_ringbuffer_emit_reloc(ring, &(struct fd_reloc){
@@ -590,7 +611,7 @@ static uint32_t msm_ringbuffer_emit_reloc_ring(struct fd_ringbuffer *ring,
 	 * being flushed), mesa can't really guarantee that a stateobj isn't
 	 * destroyed after emitted but before flush, so we must hold a ref:
 	 */
-	if (target->flags & FD_RINGBUFFER_OBJECT) {
+	if (added_cmd && (target->flags & FD_RINGBUFFER_OBJECT)) {
 		msm_ringbuffer_ref(target);
 	}
 
