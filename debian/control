@@ -1,23 +1,24 @@
 Source: libdrm
 Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
-Uploaders: Andreas Boll <aboll@debian.org>
+Uploaders: Andreas Boll <andreas.boll.dev@gmail.com>
 Build-Depends:
- debhelper-compat (= 12),
- meson,
+ debhelper (>= 10),
  quilt,
  xsltproc,
  docbook-xsl,
  libx11-dev,
  pkg-config,
  xutils-dev (>= 1:7.6+2),
+ libpthread-stubs0-dev,
  libudev-dev [linux-any],
  libpciaccess-dev,
  valgrind [amd64 armhf i386 mips mipsel powerpc s390x],
-Standards-Version: 4.5.0
+ libbsd-dev [kfreebsd-any],
+Standards-Version: 3.9.8
 Section: libs
-Vcs-Git: https://salsa.debian.org/xorg-team/lib/libdrm
-Vcs-Browser: https://salsa.debian.org/xorg-team/lib/libdrm
+Vcs-Git: https://anonscm.debian.org/git/pkg-xorg/lib/libdrm.git
+Vcs-Browser: https://anonscm.debian.org/cgit/pkg-xorg/lib/libdrm.git
 Homepage: https://cgit.freedesktop.org/mesa/drm/
 
 Package: libdrm-dev
@@ -25,15 +26,7 @@ Section: libdevel
 Architecture: linux-any kfreebsd-any
 Depends:
  libdrm2 (= ${binary:Version}),
- libdrm-intel1 (= ${binary:Version}) [amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32],
- libdrm-radeon1 (= ${binary:Version}),
- libdrm-nouveau2 (= ${binary:Version}) [linux-any],
- libdrm-amdgpu1 (= ${binary:Version}),
- libdrm-omap1 (= ${binary:Version}) [any-arm],
- libdrm-freedreno1 (= ${binary:Version}) [any-arm arm64],
- libdrm-exynos1 (= ${binary:Version}) [any-arm],
- libdrm-tegra0 (= ${binary:Version}) [any-arm arm64],
- libdrm-etnaviv1 (= ${binary:Version}) [armhf arm64],
+ libdrm-rockchip1 (= ${binary:Version}) [any-arm arm64],
  ${misc:Depends},
 Multi-Arch: same
 Description: Userspace interface to kernel DRM services -- development files
@@ -48,7 +41,6 @@ Description: Userspace interface to kernel DRM services -- development files
 Package: libdrm2
 Architecture: linux-any kfreebsd-any
 Depends:
- libdrm-common (>= ${source:Version}),
  ${shlibs:Depends},
  ${misc:Depends},
 Multi-Arch: same
@@ -62,36 +54,6 @@ Description: Userspace interface to kernel DRM services -- runtime
  .
  This package provides the runtime environment for libdrm.
 
-Package: libdrm-common
-Architecture: all
-Depends:
- ${misc:Depends},
-Multi-Arch: foreign
-Pre-Depends: ${misc:Pre-Depends}
-Description: Userspace interface to kernel DRM services -- common files
- This library implements the userspace interface to the kernel DRM
- services.  DRM stands for "Direct Rendering Manager", which is the
- kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
- The DRI is currently used on Linux to provide hardware-accelerated
- OpenGL drivers.
- .
- This package provides common files for libdrm.
-
-Package: libdrm-tests
-Depends:
- libdrm2 (= ${binary:Version}),
- ${shlibs:Depends},
- ${misc:Depends}
-Architecture: any
-Description: Testing tools from the libdrm project
- This library implements the userspace interface to the kernel DRM
- services.  DRM stands for "Direct Rendering Manager", which is the
- kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
- The DRI is currently used on Linux to provide hardware-accelerated
- OpenGL drivers.
- .
- This package contains a variety of tools for testing from the libdrm project.
-
 Package: libdrm2-udeb
 Package-Type: udeb
 Section: debian-installer
@@ -101,6 +63,23 @@ Depends:
  ${misc:Depends},
 Description: Userspace interface to kernel DRM services -- runtime
  This is a udeb, or a microdeb, for the debian-installer.
+
+Package: libdrm2-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any kfreebsd-any
+Depends:
+ libdrm2 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides debugging symbols for the libdrm2 package.
 
 Package: libdrm-intel1
 Architecture: amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32
@@ -116,6 +95,23 @@ Description: Userspace interface to intel-specific kernel DRM services -- runtim
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
 
+Package: libdrm-intel1-dbg
+Section: debug
+Priority: extra
+Architecture: amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32
+Depends:
+ libdrm-intel1 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to intel-specific kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-intel1 package.
+
 Package: libdrm-nouveau2
 Architecture: linux-any
 Depends: ${shlibs:Depends},
@@ -128,6 +124,22 @@ Description: Userspace interface to nouveau-specific kernel DRM services -- runt
  kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
+
+Package: libdrm-nouveau2-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any
+Depends: libdrm-nouveau2 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to nouveau-specific kernel DRM -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-nouveau2 package.
 
 Package: libdrm-radeon1
 Architecture: linux-any kfreebsd-any
@@ -143,6 +155,23 @@ Description: Userspace interface to radeon-specific kernel DRM services -- runti
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
 
+Package: libdrm-radeon1-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any kfreebsd-any
+Depends:
+ libdrm-radeon1 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to radeon-specific kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-radeon1 package.
+
 Package: libdrm-omap1
 Architecture: any-arm
 Depends:
@@ -156,6 +185,23 @@ Description: Userspace interface to omap-specific kernel DRM services -- runtime
  kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
+
+Package: libdrm-omap1-dbg
+Section: debug
+Priority: extra
+Architecture: any-arm
+Depends:
+ libdrm-omap1 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to omap-specific kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-omap1 package.
 
 Package: libdrm-freedreno1
 Architecture: any-arm arm64
@@ -171,6 +217,23 @@ Description: Userspace interface to msm/kgsl kernel DRM services -- runtime
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
 
+Package: libdrm-freedreno1-dbg
+Section: debug
+Priority: extra
+Architecture: any-arm arm64
+Depends:
+ libdrm-freedreno1 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to msm/kgsl kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-freedreno1 package.
+
 Package: libdrm-exynos1
 Architecture: any-arm
 Depends:
@@ -184,6 +247,23 @@ Description: Userspace interface to exynos-specific kernel DRM services -- runti
  kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
+
+Package: libdrm-exynos1-dbg
+Section: debug
+Priority: extra
+Architecture: any-arm
+Depends:
+ libdrm-exynos1 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to exynos-specific kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-exynos1 package.
 
 Package: libdrm-tegra0
 Architecture: any-arm arm64
@@ -199,6 +279,23 @@ Description: Userspace interface to tegra-specific kernel DRM services -- runtim
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
 
+Package: libdrm-tegra0-dbg
+Section: debug
+Priority: extra
+Architecture: any-arm arm64
+Depends:
+ libdrm-tegra0 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to tegra-specific kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-tegra0 package.
+
 Package: libdrm-amdgpu1
 Architecture: linux-any kfreebsd-any
 Depends:
@@ -213,16 +310,51 @@ Description: Userspace interface to amdgpu-specific kernel DRM services -- runti
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
 
-Package: libdrm-etnaviv1
-Architecture: armhf arm64
+Package: libdrm-amdgpu1-dbg
+Section: debug
+Priority: extra
+Architecture: linux-any kfreebsd-any
 Depends:
- ${shlibs:Depends},
+ libdrm-amdgpu1 (= ${binary:Version}),
  ${misc:Depends},
-Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
-Description: Userspace interface to etnaviv-specific kernel DRM services -- runtime
+Description: Userspace interface to amdgpu-specific kernel DRM services -- debugging symbols
  This library implements the userspace interface to the kernel DRM
  services.  DRM stands for "Direct Rendering Manager", which is the
  kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
  The DRI is currently used on Linux to provide hardware-accelerated
  OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-amdgpu1 package.
+
+Package: libdrm-rockchip1
+Architecture: any-arm arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: Userspace interface to msm/kgsl kernel DRM services -- runtime
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+
+Package: libdrm-rockchip1-dbg
+Section: debug
+Priority: extra
+Architecture: any-arm arm64
+Depends:
+ libdrm-exynos1 (= ${binary:Version}),
+ ${misc:Depends},
+Multi-Arch: same
+Description: Userspace interface to exynos-specific kernel DRM services -- debugging symbols
+ This library implements the userspace interface to the kernel DRM
+ services.  DRM stands for "Direct Rendering Manager", which is the
+ kernelspace portion of the "Direct Rendering Infrastructure" (DRI).
+ The DRI is currently used on Linux to provide hardware-accelerated
+ OpenGL drivers.
+ .
+ This package provides the debugging symbols for the libdrm-rockchip1 package.
+
