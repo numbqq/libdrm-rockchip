@@ -3011,9 +3011,11 @@ static int drmParseSubsystemType(int maj, int min)
     snprintf(path, sizeof(path), "/sys/dev/char/%d:%d/device", maj, min);
     if (!realpath(path, real_path))
         return -errno;
-    snprintf(path, sizeof(path), "%s", real_path);
-
-    subsystem_type = get_subsystem_type(path);
+    subsystem_type = get_subsystem_type(real_path);
+    if (subsystem_type >= 0)
+        memcpy(path, real_path, sizeof(path));
+    else
+        subsystem_type = get_subsystem_type(path);
     if (subsystem_type == DRM_BUS_VIRTIO) {
         strncat(path, "/..", PATH_MAX);
         subsystem_type = get_subsystem_type(path);
