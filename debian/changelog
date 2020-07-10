@@ -1,3 +1,9 @@
+libdrm (2.4.101-100~bionic) unstable; urgency=medium
+
+  * add Rockchip patches
+
+ -- Nick Xie <nick@khadas.com>  Fri, 10 Jul 2020 11:00:57 +0800
+
 libdrm (2.4.101-2) unstable; urgency=medium
 
   * fix-realpath-vs-firefox.diff: Fix webgl on intel with firefox.
