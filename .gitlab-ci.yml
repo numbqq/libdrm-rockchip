@@ -18,40 +18,57 @@ variables:
   DEBIAN_VERSION: buster-slim
   DEBIAN_IMAGE: "$CI_REGISTRY_IMAGE/debian/$DEBIAN_VERSION:$DEBIAN_TAG"
 
-include:
-  - project: 'wayland/ci-templates'
-    ref: 0a9bdd33a98f05af6761ab118b5074952242aab0
-    file: '/templates/debian.yml'
+.artifacts-autotools: &artifacts-autotools
+  when: always
+  paths:
+    - _build/*.log
+    - _build/*/*.log
+    - _build/*/*/*.log
 
-stages:
-  - containers
-  - build
+.meson-build: &meson-build
+  - meson _build
+      -D amdgpu=true
+      -D cairo-tests=true
+      -D etnaviv=true
+      -D exynos=true
+      -D freedreno=true
+      -D freedreno-kgsl=true
+      -D intel=true
+      -D libkms=true
+      -D man-pages=true
+      -D nouveau=true
+      -D omap=true
+      -D radeon=true
+      -D tegra=true
+      -D udev=true
+      -D valgrind=true
+      -D vc4=true
+      -D vmwgfx=true
+  - ninja -C _build
+  - ninja -C _build test
 
+.autotools-build: &autotools-build
+  - mkdir _build
+  - cd _build
+  - ../autogen.sh
+      --enable-udev
+      --enable-libkms
+      --enable-intel
+      --enable-radeon
+      --enable-amdgpu
+      --enable-nouveau
+      --enable-vmwgfx
+      --enable-omap-experimental-api
+      --enable-exynos-experimental-api
+      --enable-freedreno
+      --enable-freedreno-kgsl
+      --enable-tegra-experimental-api
+      --enable-vc4
+      --enable-etnaviv-experimental-api
+  - make
+  - make check
 
-# When & how to run the CI
-.ci-run-policy:
-  except:
-    - schedules
-  retry:
-    max: 2
-    when:
-      - runner_system_failure
-
-# CONTAINERS
-
-debian:
-  stage: containers
-  extends:
-    - .ci-run-policy
-    - .debian@container-ifnot-exists
-  variables:
-    GIT_STRATEGY: none # no need to pull the whole tree for rebuilding the image
-    DEBIAN_EXEC: 'bash .gitlab-ci/debian-install.sh'
-
-
-# BUILD
-
-.meson-build:
+latest-meson:
   stage: build
   variables:
     GIT_DEPTH: 10
@@ -124,8 +141,95 @@ meson-arch-daily:
         cunit
         docbook-xsl
         libatomic_ops
+        cairo cunit
+  script: *meson-build
+
+latest-autotools:
+  stage: build
+  image: archlinux/base:latest
+  artifacts: *artifacts-autotools
+  before_script:
+    - pacman -Syu --noconfirm --needed
+        base-devel
         libpciaccess
-        libxslt
-        meson
+        libxslt docbook-xsl
         valgrind
-  extends: .meson-build
+        libatomic_ops
+        cairo cunit
+        xorg-util-macros
+        git # autogen.sh depends on git
+  script: *autotools-build
+
+oldest-meson:
+  stage: build
+  image: debian:stable
+  artifacts: *artifacts-meson
+  before_script:
+    - printf > /etc/dpkg/dpkg.cfg.d/99-exclude-cruft "%s\n"
+        'path-exclude=/usr/share/doc/*'
+        'path-exclude=/usr/share/man/*'
+    - printf > /usr/sbin/policy-rc.d "%s\n"
+        '#!/bin/sh'
+        'exit 101'
+    - chmod +x /usr/sbin/policy-rc.d
+    - apt-get update
+    - apt-get -y --no-install-recommends install
+        build-essential
+        pkg-config
+        xsltproc
+        libxslt1-dev docbook-xsl
+        valgrind
+        libatomic-ops-dev
+        libcairo2-dev libcunit1-dev
+        ninja-build
+        python3 python3-pip
+        wget
+    # We need `--no-check-certificate` here because Debian's CA list is
+    # too old to know about LetsEncrypt's CA, so it refuses to connect
+    # to FreeDesktop.org
+    - LIBPCIACCESS_VERSION=libpciaccess-0.10 &&
+      wget --no-check-certificate https://xorg.freedesktop.org/releases/individual/lib/$LIBPCIACCESS_VERSION.tar.bz2 &&
+      tar -jxvf $LIBPCIACCESS_VERSION.tar.bz2 &&
+      (cd $LIBPCIACCESS_VERSION && ./configure --prefix=$HOME/prefix && make install)
+    - pip3 install wheel setuptools
+    - pip3 install meson==0.43
+    - export PKG_CONFIG_PATH=$HOME/prefix/lib/pkgconfig:$HOME/prefix/share/pkgconfig
+    - export LD_LIBRARY_PATH="$HOME/prefix/lib:$LD_LIBRARY_PATH"
+  script: *meson-build
+
+oldest-autotools:
+  stage: build
+  image: debian:stable
+  artifacts: *artifacts-autotools
+  before_script:
+    - printf > /etc/dpkg/dpkg.cfg.d/99-exclude-cruft "%s\n"
+        'path-exclude=/usr/share/doc/*'
+        'path-exclude=/usr/share/man/*'
+    - printf > /usr/sbin/policy-rc.d "%s\n"
+        '#!/bin/sh'
+        'exit 101'
+    - chmod +x /usr/sbin/policy-rc.d
+    - apt-get update
+    - apt-get -y --no-install-recommends install
+        build-essential
+        automake
+        autoconf
+        libtool
+        pkg-config
+        xsltproc
+        libxslt1-dev docbook-xsl
+        valgrind
+        libatomic-ops-dev
+        libcairo2-dev libcunit1-dev
+        wget
+        xutils-dev
+        git # autogen.sh depends on git
+    # We need `--no-check-certificate` here because Debian's CA list is
+    # too old to know about LetsEncrypt's CA, so it refuses to connect
+    # to FreeDesktop.org
+    - LIBPCIACCESS_VERSION=libpciaccess-0.10 &&
+      wget --no-check-certificate https://xorg.freedesktop.org/releases/individual/lib/$LIBPCIACCESS_VERSION.tar.bz2 &&
+      tar -jxvf $LIBPCIACCESS_VERSION.tar.bz2 &&
+      (cd $LIBPCIACCESS_VERSION && ./configure --prefix=$HOME/prefix && make install)
+    - export PKG_CONFIG_PATH=$HOME/prefix/lib/pkgconfig:$HOME/prefix/share/pkgconfig
+    - export LD_LIBRARY_PATH="$HOME/prefix/lib:$LD_LIBRARY_PATH"
